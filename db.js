@@ -119,10 +119,8 @@ app.get('/universities', (req, res) => {
 
           if (universities.length === results.length) {
             res.json({
-              data: universities,
-              meta: {
-                totalPages: totalPages
-              }
+              totalPages: totalPages,
+              data: universities
             });
           }
         });
@@ -132,27 +130,67 @@ app.get('/universities', (req, res) => {
 });
 
 app.get('/programs', (req, res) => {
-  const pageSize = 40; // Number of rows per page
-  const pageNumber = req.query.page || 1; // Page number from query parameter
+  const pageSize = 40;
+  const pageNumber = req.query.page || 1;
+  let filter = req.query.filter || "all";
 
-  // Calculate the offset to skip rows on previous pages
+  const filterValues = filter.split(',');
+  const placeholders = filterValues.map(() => '?').join(', ');
+
+  
   const offset = (pageNumber - 1) * pageSize;
+    
+  let countQuery;
+  let dataQuery;
 
-  const query = `
-    SELECT DISTINCT
-      modified_programadi AS programadi,
-      puanturu
-    FROM final_data
-    ORDER BY programadi
-    LIMIT ${pageSize} OFFSET ${offset}
-  `;
+  if(filter  === "all") {
+    countQuery = `
+      SELECT COUNT(DISTINCT modified_programadi) as total
+      FROM final_data
+    `;
 
-  connection.query(query, (err, results) => {
+    dataQuery = `
+      SELECT DISTINCT
+        modified_programadi AS programadi,
+        puanturu
+      FROM final_data
+      ORDER BY programadi
+      LIMIT ${pageSize} OFFSET ${offset}
+    `;
+  } else {
+    countQuery = `
+      SELECT COUNT(DISTINCT modified_programadi) as total
+      FROM final_data
+      WHERE puanturu IN (${placeholders})
+    `;
+
+    dataQuery = `
+      SELECT DISTINCT
+        modified_programadi AS programadi,
+        puanturu
+      FROM final_data
+      WHERE puanturu IN (${placeholders})
+      ORDER BY programadi
+      LIMIT ${pageSize} OFFSET ${offset}
+    `;
+  } 
+
+  connection.query(countQuery, filter === "all" ? [] : filterValues,(err, countResult) => {
     if (err) {
       console.error('Error querying MySQL:', err);
       res.status(500).json({ error: 'Internal Server Error' });
       return;
     }
+
+    const totalRows = countResult[0].total;
+    const totalPages = Math.ceil(totalRows / pageSize);
+
+    connection.query(dataQuery, filter === "all" ? [] : filterValues, (err, results) => {
+      if (err) {
+        console.error('Error querying data:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+        return;
+      }
 
     const programs = [];
 
@@ -206,11 +244,15 @@ app.get('/programs', (req, res) => {
 
         // Check if all program data has been collected
         if (programs.length === results.length) {
-          res.json(programs);
+          res.json({
+            totalPages: totalPages,
+            data: programs
+          });
         }
       });
     }
   });
+});
 });
 
 
