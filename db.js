@@ -23,6 +23,7 @@ app.get("/",function(req,res){
 
 
 app.get('/universities', (req, res) => {
+  const startTime = Date.now(); 
   const pageSize = 40;
   const pageNumber = req.query.page || 1;
   let filter = req.query.filter || "all";
@@ -116,6 +117,10 @@ app.get('/universities', (req, res) => {
           };
 
           universities.push(universityData);
+          const endTime = Date.now(); // Sorgunun bitiş zamanını kaydet
+          const elapsedTime = endTime - startTime; // Çalışma süresini hesapla
+      
+          console.log(`Universities Sorgu çalışma süresi: ${elapsedTime} ms`);
 
           if (universities.length === results.length) {
             res.json({
@@ -130,6 +135,7 @@ app.get('/universities', (req, res) => {
 });
 
 app.get('/programs', (req, res) => {
+  const startTime = Date.now(); 
   const pageSize = 40;
   const pageNumber = req.query.page || 1;
   let filter = req.query.filter || "all";
@@ -228,6 +234,7 @@ app.get('/programs', (req, res) => {
             uni_image: uniRow.uni_image,
             uni_type: uniRow.uni_type,
             programadi: uniRow.programadi,
+            programkodu: uniRow.programkodu,
             puanturu: uniRow.puanturu,
             tabanpuan: uniRow.tabanpuan,
             basarisirasi: uniRow.basarisirasi,
@@ -242,6 +249,11 @@ app.get('/programs', (req, res) => {
 
         programs.push(programData);
 
+        const endTime = Date.now(); // Sorgunun bitiş zamanını kaydet
+        const elapsedTime = endTime - startTime; // Çalışma süresini hesapla
+    
+        console.log(`Programs Sorgu çalışma süresi: ${elapsedTime} ms`);
+
         // Check if all program data has been collected
         if (programs.length === results.length) {
           res.json({
@@ -253,6 +265,45 @@ app.get('/programs', (req, res) => {
     }
   });
 });
+});
+
+app.get('/program-detail', (req, res) => {
+  let programCode = req.query.code;
+
+  const query = 'SELECT * FROM program_data WHERE programcode = ?';
+
+  connection.query(query, [programCode], (err, results) => {
+    if (err) {
+      console.error('Error querying the database: ' + err.stack);
+      res.status(500).json({ error: 'Internal Server Error' });
+      return;
+    }
+
+    if (results.length === 0) {
+      res.status(404).json({ error: 'Program not found' });
+    } else {
+      const formattedResults = results.map((result) => {
+        // Parse the JSON data
+        result.taban_puan = JSON.parse(result.taban_puan);
+        result.kontenjan = JSON.parse(result.kontenjan);
+        result.basarisirasi = JSON.parse(result.basarisirasi);
+
+        // Create a new array for the desired format for the years 2023, 2022, 2021, and 2020
+        const formattedYears = [2023, 2022, 2021, 2020].map((year) => {
+          return {
+            year,
+            taban_puan: result.taban_puan[`taban_puan_${year}`],
+            kontenjan: result.kontenjan[`kontenjan_${year}`],
+            basarisirasi: result.basarisirasi[`basari_sirasi_${year}`],
+          };
+        });
+
+        return { data: formattedYears }; // Wrap the array in an object and set a property 'data'
+      });
+
+      res.json(formattedResults[0]); // Send the first element of the array as the response
+    }
+  });
 });
 
 
