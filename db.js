@@ -283,12 +283,11 @@ app.get('/program-detail', (req, res) => {
       res.status(404).json({ error: 'Program not found' });
     } else {
       const formattedResults = results.map((result) => {
-        // Parse the JSON data
+
         result.taban_puan = JSON.parse(result.taban_puan);
         result.kontenjan = JSON.parse(result.kontenjan);
         result.basarisirasi = JSON.parse(result.basarisirasi);
 
-        // Create a new array for the desired format for the years 2023, 2022, 2021, and 2020
         const formattedYears = [2023, 2022, 2021, 2020].map((year) => {
           return {
             year,
@@ -298,10 +297,10 @@ app.get('/program-detail', (req, res) => {
           };
         });
 
-        return { data: formattedYears }; // Wrap the array in an object and set a property 'data'
+        return { data: formattedYears };
       });
 
-      res.json(formattedResults[0]); // Send the first element of the array as the response
+      res.json(formattedResults[0]);
     }
   });
 });
