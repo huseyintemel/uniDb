@@ -100,6 +100,7 @@ app.get('/universities', (req, res) => {
             basarisirasi
           FROM final_data
           WHERE uni_name = ?
+          ORDER BY tabanpuan DESC
         `;
 
         connection.query(programQuery, [uni_name], (err, programResults) => {
@@ -219,6 +220,7 @@ app.get('/programs', (req, res) => {
           basarisirasi
         FROM final_data
         WHERE modified_programadi = ? AND puanturu = ?
+        ORDER BY tabanpuan DESC
       `;
 
       connection.query(universitiesQuery, [programadi, puanturu], (err, universitiesResult) => {
@@ -270,7 +272,13 @@ app.get('/programs', (req, res) => {
 app.get('/program-detail', (req, res) => {
   let programCode = req.query.code;
 
-  const query = 'SELECT * FROM program_data WHERE programcode = ?';
+  const query = `
+    SELECT pd.*,
+      fd.uni_name, fd.uni_image,fd.modified_programadi,fd.fakulte,fd.puanturu,fd.bursturu
+    FROM program_data pd
+    JOIN final_data fd ON pd.programcode = fd.programkodu
+    WHERE pd.programcode = ?;
+  `;
 
   connection.query(query, [programCode], (err, results) => {
     if (err) {
@@ -297,7 +305,16 @@ app.get('/program-detail', (req, res) => {
           };
         });
 
-        return { data: formattedYears };
+        const uni_data = {
+          uni_name: result.uni_name,
+          uni_image: result.uni_image,
+          programadi: result.modified_programadi,
+          fakulte: result.fakulte,
+          puanturu: result.puanturu,
+          bursturu: result.bursturu,
+        }
+
+        return {uniData: uni_data ,data: formattedYears };
       });
 
       res.json(formattedResults[0]);
