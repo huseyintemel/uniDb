@@ -322,6 +322,25 @@ app.get('/program-detail', (req, res) => {
   });
 });
 
+app.get('/favorites', (req, res) => {
+  const programCodes = req.query.codes ? req.query.codes.split(',') : [];
+
+  if (programCodes.length === 0) {
+    res.status(400).json({ error: 'No program codes provided' });
+    return;
+  }
+  
+  const query = 'SELECT * FROM final_data WHERE programkodu IN (?) ORDER BY tabanpuan DESC';
+
+  connection.query(query, [programCodes], (err, results) => {
+    if (err) {
+      console.error('Error executing query: ' + err.message);
+      res.status(500).send('Internal Server Error');
+    } else {
+      res.json(results);
+    }
+  });
+});
 
 const port = process.env.PORT || 8080;
 app.listen(port)
