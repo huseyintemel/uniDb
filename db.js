@@ -27,13 +27,54 @@ app.get('/universities', (req, res) => {
   const pageSize = 40;
   const pageNumber = req.query.page || 1;
   let filter = req.query.filter || "all";
+  let searchTerm = req.query.q;
+  let queryParam;
 
   const offset = (pageNumber - 1) * pageSize;
   
   let countQuery;
   let dataQuery;
 
-  if(filter  === "all") {
+  const searchPattern = `%${searchTerm}%`;
+
+  if(searchTerm && filter == "all") {
+    countQuery = `
+      SELECT COUNT(DISTINCT uni_name) as total
+      FROM final_data
+      WHERE uni_name LIKE ?
+    `;
+
+    dataQuery = `
+      SELECT DISTINCT
+        uni_name,
+        uni_image,
+        uni_type
+      FROM final_data
+      WHERE uni_name LIKE ?
+      ORDER BY uni_name
+    `;
+
+    queryParam = [searchPattern]
+
+  }else if(searchTerm && filter != "all"){
+    countQuery = `
+      SELECT COUNT(DISTINCT uni_name) as total
+      FROM final_data
+      WHERE uni_name LIKE ? AND uni_type = ?
+    `;
+
+    dataQuery = `
+      SELECT DISTINCT
+        uni_name,
+        uni_image,
+        uni_type
+      FROM final_data
+      WHERE uni_name LIKE ? AND uni_type = ?
+      ORDER BY uni_name
+    `;
+
+    queryParam = [searchPattern,filter]
+  } else if(filter  === "all") {
     countQuery = `
       SELECT COUNT(DISTINCT uni_name) as total
       FROM final_data
@@ -48,6 +89,8 @@ app.get('/universities', (req, res) => {
       ORDER BY uni_name
       LIMIT ${pageSize} OFFSET ${offset}
     `;
+
+    queryParam = [filter]
   } else {
     countQuery = `
       SELECT COUNT(DISTINCT uni_name) as total
@@ -65,9 +108,12 @@ app.get('/universities', (req, res) => {
       ORDER BY uni_name
       LIMIT ${pageSize} OFFSET ${offset}
     `;
+
+    queryParam = [filter]
   } 
 
-  connection.query(countQuery, [filter], (err, countResult) => {
+
+  connection.query(countQuery, queryParam, (err, countResult) => {
     if (err) {
       console.error('Error querying count:', err);
       res.status(500).json({ error: 'Internal Server Error' });
@@ -77,14 +123,22 @@ app.get('/universities', (req, res) => {
     const totalRows = countResult[0].total;
     const totalPages = Math.ceil(totalRows / pageSize);
 
-    connection.query(dataQuery, [filter], (err, results) => {
+    connection.query(dataQuery, queryParam, (err, results) => {
       if (err) {
         console.error('Error querying data:', err);
         res.status(500).json({ error: 'Internal Server Error' });
         return;
       }
-
+      
       const universities = [];
+
+      if(results.length == 0){
+        res.json({
+          totalPages: 0,
+          data: []
+        });
+        return
+      }
 
       for (const row of results) {
         const { uni_name, uni_image, uni_type } = row;
