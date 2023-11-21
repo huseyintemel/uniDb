@@ -194,17 +194,53 @@ app.get('/programs', (req, res) => {
   const pageSize = 40;
   const pageNumber = req.query.page || 1;
   let filter = req.query.filter || "all";
+  let searchTerm = req.query.q;
+  let queryParam;
 
   const filterValues = filter.split(',');
   const placeholders = filterValues.map(() => '?').join(', ');
 
+  const searchPattern = `${searchTerm}%`;
   
   const offset = (pageNumber - 1) * pageSize;
     
   let countQuery;
   let dataQuery;
 
-  if(filter  === "all") {
+  if(searchTerm && filter == "all") {
+    countQuery = `
+      SELECT COUNT(DISTINCT modified_programadi) as total
+      FROM final_data
+      WHERE programadi LIKE ?
+    `;
+
+    dataQuery = `
+      SELECT DISTINCT
+        modified_programadi AS programadi,
+        puanturu
+      FROM final_data
+      WHERE programadi LIKE ?
+      ORDER BY programadi
+    `;
+
+    queryParam = [searchPattern]
+  }else if (searchTerm && filter != "all") {
+    countQuery = `
+      SELECT COUNT(DISTINCT modified_programadi) as total
+      FROM final_data
+      WHERE programadi LIKE ? AND puanturu IN (${placeholders})
+    `;
+
+    dataQuery = `
+      SELECT DISTINCT
+        modified_programadi AS programadi,
+        puanturu
+      FROM final_data
+      WHERE programadi LIKE ? AND puanturu IN (${placeholders})
+      ORDER BY programadi
+    `;
+    queryParam = [searchPattern,...filterValues]
+  } else if(filter  === "all") {
     countQuery = `
       SELECT COUNT(DISTINCT modified_programadi) as total
       FROM final_data
@@ -218,6 +254,8 @@ app.get('/programs', (req, res) => {
       ORDER BY programadi
       LIMIT ${pageSize} OFFSET ${offset}
     `;
+
+    queryParam = []
   } else {
     countQuery = `
       SELECT COUNT(DISTINCT modified_programadi) as total
@@ -234,9 +272,11 @@ app.get('/programs', (req, res) => {
       ORDER BY programadi
       LIMIT ${pageSize} OFFSET ${offset}
     `;
+
+    queryParam = [...filterValues]
   } 
 
-  connection.query(countQuery, filter === "all" ? [] : filterValues,(err, countResult) => {
+  connection.query(countQuery, queryParam,(err, countResult) => {
     if (err) {
       console.error('Error querying MySQL:', err);
       res.status(500).json({ error: 'Internal Server Error' });
@@ -246,7 +286,7 @@ app.get('/programs', (req, res) => {
     const totalRows = countResult[0].total;
     const totalPages = Math.ceil(totalRows / pageSize);
 
-    connection.query(dataQuery, filter === "all" ? [] : filterValues, (err, results) => {
+    connection.query(dataQuery, queryParam, (err, results) => {
       if (err) {
         console.error('Error querying data:', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -255,11 +295,18 @@ app.get('/programs', (req, res) => {
 
     const programs = [];
 
-    // Loop through distinct programadi values
+
+    if(results.length == 0){
+      res.json({
+        totalPages: 0,
+        data: []
+      });
+      return
+    }
+
     for (const row of results) {
       const { programadi, puanturu } = row;
 
-      // Fetch universities for each programadi
       const universitiesQuery = `
         SELECT
           uni_name,
