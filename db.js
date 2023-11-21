@@ -35,7 +35,7 @@ app.get('/universities', (req, res) => {
   let countQuery;
   let dataQuery;
 
-  const searchPattern = `%${searchTerm}%`;
+  const searchPattern = `${searchTerm}%`;
 
   if(searchTerm && filter == "all") {
     countQuery = `
