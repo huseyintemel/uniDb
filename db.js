@@ -35,7 +35,7 @@ app.get('/universities', (req, res) => {
   let countQuery;
   let dataQuery;
 
-  const searchPattern = `${searchTerm}%`;
+  const searchPattern = `%${searchTerm}%`;
 
   if(searchTerm && filter == "all") {
     countQuery = `
@@ -200,7 +200,7 @@ app.get('/programs', (req, res) => {
   const filterValues = filter.split(',');
   const placeholders = filterValues.map(() => '?').join(', ');
 
-  const searchPattern = `${searchTerm}%`;
+  const searchPattern = `%${searchTerm}%`;
   
   const offset = (pageNumber - 1) * pageSize;
     
