@@ -35,7 +35,7 @@ app.get('/universities', (req, res) => {
   let countQuery;
   let dataQuery;
 
-  const searchPattern = `%${searchTerm}%`;
+  const searchPattern = `${searchTerm}%`;
 
   if(searchTerm && filter == "all") {
     countQuery = `
@@ -200,7 +200,7 @@ app.get('/programs', (req, res) => {
   const filterValues = filter.split(',');
   const placeholders = filterValues.map(() => '?').join(', ');
 
-  const searchPattern = `${searchTerm}%`;
+  const searchPattern = `%${searchTerm}%`;
   
   const offset = (pageNumber - 1) * pageSize;
     
@@ -211,7 +211,7 @@ app.get('/programs', (req, res) => {
     countQuery = `
       SELECT COUNT(DISTINCT modified_programadi) as total
       FROM final_data
-      WHERE programadi LIKE ?
+      WHERE modified_programadi LIKE ?
     `;
 
     dataQuery = `
@@ -219,8 +219,8 @@ app.get('/programs', (req, res) => {
         modified_programadi AS programadi,
         puanturu
       FROM final_data
-      WHERE programadi LIKE ?
-      ORDER BY programadi
+      WHERE modified_programadi LIKE ?
+      ORDER BY modified_programadi
     `;
 
     queryParam = [searchPattern]
@@ -228,7 +228,7 @@ app.get('/programs', (req, res) => {
     countQuery = `
       SELECT COUNT(DISTINCT modified_programadi) as total
       FROM final_data
-      WHERE programadi LIKE ? AND puanturu IN (${placeholders})
+      WHERE modified_programadi LIKE ? AND puanturu IN (${placeholders})
     `;
 
     dataQuery = `
@@ -236,7 +236,7 @@ app.get('/programs', (req, res) => {
         modified_programadi AS programadi,
         puanturu
       FROM final_data
-      WHERE programadi LIKE ? AND puanturu IN (${placeholders})
+      WHERE modified_programadi LIKE ? AND puanturu IN (${placeholders})
       ORDER BY programadi
     `;
     queryParam = [searchPattern,...filterValues]
