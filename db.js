@@ -12,6 +12,14 @@ var connection = mysql.createConnection({
   port: 8889
 })
 
+var connection2 = mysql.createConnection({
+  host: "localhost",
+  user: "root",
+  password: "root",
+  database: "associate",
+  port: 8889
+})
+
 connection.connect((err) => {
   if(err) throw err
   console.log("Mysql connected")
@@ -35,7 +43,7 @@ app.get('/universities', (req, res) => {
   let countQuery;
   let dataQuery;
 
-  const searchPattern = `${searchTerm}%`;
+  const searchPattern = `%${searchTerm}%`;
 
   if(searchTerm && filter == "all") {
     countQuery = `
@@ -372,16 +380,35 @@ app.get('/programs', (req, res) => {
 
 app.get('/program-detail', (req, res) => {
   let programCode = req.query.code;
+  let segment = req.query.segment;
 
-  const query = `
-    SELECT pd.*,
-      fd.uni_name, fd.uni_image,fd.modified_programadi,fd.fakulte,fd.puanturu,fd.bursturu
-    FROM program_data pd
-    JOIN final_data fd ON pd.programcode = fd.programkodu
-    WHERE pd.programcode = ?;
-  `;
+  let query;
+  let connectionToUse;
+  let yearsToUse;
 
-  connection.query(query, [programCode], (err, results) => {
+  if (segment === '0') {
+    query = `
+      SELECT pd.*,
+        fd.uni_name, fd.uni_image,fd.modified_programadi,fd.fakulte,fd.puanturu,fd.bursturu
+      FROM program_data pd
+      JOIN final_data fd ON pd.programcode = fd.programkodu
+      WHERE pd.programcode = ?;
+    `;
+    connectionToUse = connection;
+    yearsToUse = [2023, 2022, 2021, 2020];
+  } else {
+    query = `
+      SELECT pd.*,
+        fd.uni_name, fd.uni_image,fd.modified_programadi,fd.fakulte,fd.puanturu,fd.bursturu
+      FROM program_data pd
+      JOIN final_data fd ON pd.programcode = fd.programkodu
+      WHERE pd.programcode = ?;
+    `;
+    connectionToUse = connection2;
+    yearsToUse = [2023, 2022];
+  }
+
+  connectionToUse.query(query, [programCode], (err, results) => {
     if (err) {
       console.error('Error querying the database: ' + err.stack);
       res.status(500).json({ error: 'Internal Server Error' });
@@ -392,12 +419,11 @@ app.get('/program-detail', (req, res) => {
       res.status(404).json({ error: 'Program not found' });
     } else {
       const formattedResults = results.map((result) => {
-
         result.taban_puan = JSON.parse(result.taban_puan);
         result.kontenjan = JSON.parse(result.kontenjan);
         result.basarisirasi = JSON.parse(result.basarisirasi);
 
-        const formattedYears = [2023, 2022, 2021, 2020].map((year) => {
+        const formattedYears = yearsToUse.map((year) => {
           return {
             year,
             taban_puan: result.taban_puan[`taban_puan_${year}`],
@@ -415,7 +441,7 @@ app.get('/program-detail', (req, res) => {
           bursturu: result.bursturu,
         }
 
-        return {uniData: uni_data ,data: formattedYears };
+        return {uniData: uni_data, data: formattedYears};
       });
 
       res.json(formattedResults[0]);
@@ -442,6 +468,189 @@ app.get('/favorites', (req, res) => {
     }
   });
 });
+
+app.get('/associate-programs', (req, res) => {
+  const pageSize = 40;
+  const pageNumber = req.query.page || 1;
+  let filter = "all";
+  let searchTerm = req.query.q;
+  let queryParam;
+
+  const searchPattern = `%${searchTerm}%`;
+  
+  const offset = (pageNumber - 1) * pageSize;
+    
+  let countQuery;
+  let dataQuery;
+
+  if(searchTerm) {
+    countQuery = `
+      SELECT COUNT(DISTINCT modified_programadi) as total
+      FROM final_data
+      WHERE modified_programadi LIKE ?
+    `;
+
+    dataQuery = `
+      SELECT DISTINCT
+        modified_programadi AS programadi,
+        puanturu
+      FROM final_data
+      WHERE modified_programadi LIKE ?
+      ORDER BY modified_programadi
+    `;
+
+    queryParam = [searchPattern]
+  } else if(filter  === "all") {
+    countQuery = `
+      SELECT COUNT(DISTINCT modified_programadi) as total
+      FROM final_data
+    `;
+
+    dataQuery = `
+      SELECT DISTINCT
+        modified_programadi AS programadi,
+        puanturu
+      FROM final_data
+      ORDER BY programadi
+      LIMIT ${pageSize} OFFSET ${offset}
+    `;
+
+    queryParam = []
+  }
+
+  connection2.query(countQuery, queryParam,(err, countResult) => {
+    if (err) {
+      console.error('Error querying MySQL:', err);
+      res.status(500).json({ error: 'Internal Server Error' });
+      return;
+    }
+
+    const totalRows = countResult[0].total;
+    const totalPages = Math.ceil(totalRows / pageSize);
+
+    connection2.query(dataQuery, queryParam, (err, results) => {
+      if (err) {
+        console.error('Error querying data:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+        return;
+      }
+
+    const programs = [];
+
+
+    if(results.length == 0){
+      res.json({
+        totalPages: 0,
+        data: []
+      });
+      return
+    }
+
+    for (const row of results) {
+      const { programadi, puanturu } = row;
+
+      const universitiesQuery = `
+        SELECT
+          uni_name,
+          uni_image,
+          uni_type,
+          programadi,
+          programkodu,
+          fakulte,
+          bursturu,
+          puanturu,
+          tabanpuan,
+          basarisirasi
+        FROM final_data
+        WHERE modified_programadi = ? AND puanturu = ?
+        ORDER BY tabanpuan DESC
+      `;
+
+      connection2.query(universitiesQuery, [programadi, puanturu], (err, universitiesResult) => {
+        if (err) {
+          console.error('Error querying universities:', err);
+          res.status(500).json({ error: 'Internal Server Error' });
+          return;
+        }
+
+        const universities = universitiesResult.map((uniRow) => {
+          return {
+            uni_name: uniRow.uni_name,
+            uni_image: uniRow.uni_image,
+            uni_type: uniRow.uni_type,
+            programadi: uniRow.programadi,
+            programkodu: uniRow.programkodu,
+            puanturu: uniRow.puanturu,
+            tabanpuan: uniRow.tabanpuan,
+            basarisirasi: uniRow.basarisirasi,
+          };
+        });
+
+        const programData = {
+          programadi,
+          puanturu,
+          universities,
+        };
+
+        programs.push(programData);
+
+        if (programs.length === results.length) {
+          res.json({
+            totalPages: totalPages,
+            data: programs
+          });
+        }
+      });
+    }
+  });
+});
+});
+
+app.get('/combined-favorites', async (req, res) => {
+  const associateCodes = req.query.associateCodes ? req.query.associateCodes.split(',') : [];
+  const favoriteCodes = req.query.favoriteCodes ? req.query.favoriteCodes.split(',') : [];
+
+  if (associateCodes.length === 0 && favoriteCodes.length === 0) {
+    res.status(400).json({ error: 'No program codes provided' });
+    return;
+  }
+
+  const associateQuery = 'SELECT * FROM final_data WHERE programkodu IN (?) ORDER BY tabanpuan DESC';
+  const favoriteQuery = 'SELECT * FROM final_data WHERE programkodu IN (?) ORDER BY tabanpuan DESC';
+
+  const associatePromise = new Promise((resolve, reject) => {
+    connection2.query(associateQuery, [associateCodes], (err, results) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(results);
+      }
+    });
+  });
+
+  const favoritePromise = new Promise((resolve, reject) => {
+    connection.query(favoriteQuery, [favoriteCodes], (err, results) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(results);
+      }
+    });
+  });
+
+  try {
+    const associateResults = await associatePromise;
+    const favoriteResults = await favoritePromise;
+
+    const combinedResults = [...favoriteResults,...associateResults,];
+
+    res.json(combinedResults);
+  } catch (error) {
+    console.error('Error executing query: ' + error.message);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
 
 const port = process.env.PORT || 8080;
 app.listen(port)
